@@ -9250,10 +9250,43 @@ For premium ease of use, you can click the visual override button 'Modify & Choo
                       </div>
                     </div>
 
+                    {/* Input Style Selection Bar */}
+                    <div className="bg-slate-50 p-2 border border-slate-200 rounded-xl space-y-2 no-print" dir="rtl">
+                      <label className="block text-[11px] font-black text-slate-800">
+                        {language === "ar" ? "🎯 طريقة تسجيل الرغبات المتاحة لسيادتكم:" : "🎯 Available Wish Registration System:"}
+                      </label>
+                      <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => setWishInputMode("stamp")}
+                          className={`py-1.5 px-2 rounded-lg font-black transition-all border flex items-center justify-center gap-1 cursor-pointer ${
+                            wishInputMode === "stamp"
+                              ? "bg-pink-600 text-white border-pink-700 shadow-sm"
+                              : "bg-white hover:bg-slate-50 text-slate-700 border-slate-210"
+                          }`}
+                        >
+                          <CheckSquare className="w-3.5 h-3.5 shrink-0" />
+                          <span>{language === "ar" ? "📍 الختم السريع بلمسة (جديد)" : "Fast Stamp (1-Click)"}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setWishInputMode("manual")}
+                          className={`py-1.5 px-2 rounded-lg font-black transition-all border flex items-center justify-center gap-1 cursor-pointer ${
+                            wishInputMode === "manual"
+                              ? "bg-pink-600 text-white border-pink-700 shadow-sm"
+                              : "bg-white hover:bg-slate-50 text-slate-700 border-slate-210"
+                          }`}
+                        >
+                          <FileText className="w-3.5 h-3.5 shrink-0" />
+                          <span>{language === "ar" ? "✍️ تعبئة استمارة مبررة" : "Detailed Manual"}</span>
+                        </button>
+                      </div>
+                    </div>
+
                     {/* Date choice */}
                     <div className="space-y-3.5 text-xs font-sans">
                       <div>
-                        <label className="block text-[11px] font-black text-slate-900 mb-2">
+                        <label className="block text-[11px] font-black text-slate-900 mb-2 mt-2">
                           {language === "ar" ? "📍 جدول تحديد رغبة اليوم باللمس (علامة اليوم 1 - 31):" : "📍 Roster-Style Day Marking Table (1 - 31):"}
                         </label>
                         
@@ -9301,7 +9334,13 @@ For premium ease of use, you can click the visual override button 'Modify & Choo
                                     <td key={dayKey} className="p-1">
                                       <button
                                         type="button"
-                                        onClick={() => setWishDayKey(dayKey)}
+                                        onClick={() => {
+                                          if (wishInputMode === "stamp") {
+                                            handleStampWish(dayKey, stampActiveShift, isRosterFullyLocked);
+                                          } else {
+                                            setWishDayKey(dayKey);
+                                          }
+                                        }}
                                         className={`w-7 h-7 rounded-lg text-[9px] flex items-center justify-center border font-bold transition-all cursor-pointer ${cellBg} ${
                                           isSelected ? "ring-2 ring-pink-500 scale-110 shadow-md border-pink-500 z-10" : ""
                                         }`}
@@ -9317,8 +9356,49 @@ For premium ease of use, you can click the visual override button 'Modify & Choo
                           </table>
                         </div>
 
+                        {/* Stamp Palette Controls (Visible only if mode is stamp) */}
+                        {wishInputMode === "stamp" && (
+                          <div className="bg-slate-150/40 p-3 rounded-xl border border-pink-100 text-right space-y-2 mt-2 no-print">
+                            <label className="block text-[11px] font-black text-pink-700">
+                              {language === "ar" ? "🎯 تفضيلات شفت الختم السريع (اختر الشفت لتكراره بالنقر):" : "🎯 Stamp palette (select a shift then click days above):"}
+                            </label>
+                            <div className="flex flex-wrap gap-1.5 justify-end" dir="rtl">
+                              {[
+                                { id: "M", labelAr: "M صباحي", color: "bg-sky-550 border-sky-450 hover:bg-sky-600 text-white" },
+                                { id: "A", labelAr: "A ظهر", color: "bg-amber-550 border-amber-450 hover:bg-amber-600 text-white" },
+                                { id: "D", labelAr: "D يوم كامل", color: "bg-teal-550 border-teal-450 hover:bg-teal-600 text-white" },
+                                { id: "N", labelAr: "N نايت", color: "bg-violet-650 border-violet-550 hover:bg-violet-750 text-white" },
+                                { id: "OFF", labelAr: "OFF أوف", color: "bg-gray-550 border-gray-450 hover:bg-gray-600 text-white" },
+                                { id: "AL", labelAr: "AL سنوية", color: "bg-emerald-650 border-emerald-550 hover:bg-emerald-700 text-white" },
+                                { id: "DELETE", labelAr: "❌ مسح الرغبة", color: "bg-rose-600 border-rose-500 hover:bg-rose-700 text-white" },
+                              ].map((sh) => {
+                                const isActive = stampActiveShift === sh.id;
+                                return (
+                                  <button
+                                    key={sh.id}
+                                    type="button"
+                                    onClick={() => setStampActiveShift(sh.id)}
+                                    className={`px-2.5 py-1.5 rounded-lg text-[10.5px] font-black border transition-all cursor-pointer flex items-center gap-1 ${
+                                      isActive
+                                        ? "ring-2 ring-pink-500 ring-offset-1 scale-105 shadow-md " + sh.color
+                                        : "bg-white hover:bg-slate-50 text-slate-700 border-slate-210"
+                                    }`}
+                                  >
+                                    <span>{language === "ar" ? sh.labelAr : sh.id}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <p className="text-[10px] text-slate-500 font-sans mt-1">
+                              💡 {language === "ar" 
+                                ? `الوضع النشط: [${stampActiveShift === "DELETE" ? "مسح نوبتجية" : "تثبيت وردية " + stampActiveShift}]. بمجرد تفعيله، انقر فوق أي مربع يوم بالـجدول أعلاه للمزامنة والسحابية الفورية!`
+                                : `Active Stamp: [${stampActiveShift}]. Click any cell on the calendar grid to apply immediately.`}
+                            </p>
+                          </div>
+                        )}
+
                         <div className="flex flex-wrap items-center justify-between gap-2 mt-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-[10px] text-slate-500 font-sans">
-                          <span className="font-bold text-slate-700">💡 {language === "ar" ? "انقر على مربع اليوم (1 - 31) لتسجيل أو تعديل رغبتك السحابية مباشرة" : "Click any day cell (1 - 31) to submit or manage wishes"}</span>
+                          <span className="font-bold text-slate-700">💡 {language === "ar" ? "انقر على مربع اليوم (1 - 31) للتقديم الفوري أو التحديد حسب الوضع المختار" : "Click table cell (1 - 31) to submit or manage wishes"}</span>
                           <div className="flex gap-2">
                             <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-amber-150 border border-amber-300 inline-block" /> {language === "ar" ? "طلب معلق" : "Pending"}</span>
                             <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-emerald-150 border border-emerald-300 inline-block" /> {language === "ar" ? "موافق عليها" : "Approved"}</span>
@@ -9328,11 +9408,12 @@ For premium ease of use, you can click the visual override button 'Modify & Choo
 
                         <div className="mt-3 bg-pink-100/30 p-3 rounded-xl border border-pink-150 text-[11px] text-slate-800 leading-relaxed font-sans text-right">
                           📆 <strong>{language === "ar" ? "الفصل التشغيلي النشط حالياً:" : "Current Operational Window:"}</strong> {language === "ar" ? "يونيو - يوليو 2026 (الدور الصيفي الموحد)" : "June - July 2026 (Unified Summer Cycle)"}
+
                         </div>
                       </div>
 
                       {/* CHECK IF LOGGED-IN NURSE ALREADY HAS APPROVED SHIFT */}
-                      {selfApprovedWishForDay ? (
+                      {wishInputMode === "manual" && (selfApprovedWishForDay ? (
                         <div className="p-4 bg-amber-50 border border-amber-200/90 rounded-xl space-y-3 text-right">
                           <h5 className="font-extrabold text-amber-800 text-xs flex items-center gap-1.5 justify-end">
                             <span>⚠️ شفتك لهذا اليوم معتمد ومغلق بالفصل</span>
@@ -9543,7 +9624,7 @@ For premium ease of use, you can click the visual override button 'Modify & Choo
                             <span>{language === "ar" ? "إرسال الرغبة والطلب للمشرف" : "Submit Wish to Supervisor"}</span>
                           </button>
                         </>
-                      )}
+                      ))}
                     </div>
                   </div>
 
