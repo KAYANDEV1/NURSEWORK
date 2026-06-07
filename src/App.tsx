@@ -72,6 +72,7 @@ import MessagingDashboard from "./components/MessagingDashboard";
 import CloudSettingsPage from "./components/CloudSettingsPage";
 import RosterPlanningPanel from "./components/RosterPlanningPanel";
 import UserApprovalDashboard from "./components/UserApprovalDashboard";
+import QualityAnalyticsHub from "./components/QualityAnalyticsHub";
 import { FORM_TEMPLATES, createNewRecord, getItemsForTemplate } from "./data/templates";
 import { generatePDF } from "./lib/pdfGenerator";
 import {
@@ -122,9 +123,36 @@ import {
   saveRole,
   deleteRole,
   savePermission,
-  deletePermission
+  deletePermission,
+  syncSentinelIncidents,
+  saveSentinelIncident,
+  deleteSentinelIncident
 } from "./lib/firestoreService";
 import { useFirestoreSync } from "./hooks/useFirestoreSync";
+
+const sessionStorageBackup = typeof window !== "undefined" ? window.sessionStorage : null;
+// Secure Clinical Gate: Redirect all local persistent caches to sessionStorage for real-time security. 
+// This ensures ZERO patient clinical data or credential logs persist on the local host drive once the browser tab is closed.
+const localStorage = {
+  getItem: (key: string) => sessionStorageBackup?.getItem(key) || null,
+  setItem: (key: string, value: string) => {
+    try {
+      sessionStorageBackup?.setItem(key, value);
+    } catch (e) {}
+  },
+  removeItem: (key: string) => {
+    try {
+      sessionStorageBackup?.removeItem(key);
+    } catch (e) {}
+  },
+  clear: () => {
+    try {
+      sessionStorageBackup?.clear();
+    } catch (e) {}
+  },
+  key: (index: number) => sessionStorageBackup?.key(index) || null,
+  get length() { return sessionStorageBackup?.length || 0; }
+};
 
 // 4 Core Mock Users for Baheya Hospital Access Rules matching the requested design
 const BASE_MOCK_USERS: AppUser[] = [
@@ -734,6 +762,23 @@ function AppContent() {
   const [language, setLanguage] = useState<"ar" | "en">("ar");
   const [isBellOpen, setIsBellOpen] = useState(false);
 
+  // Clinical Quality sub-tabs and incident logs inputs
+  const [analyticsSubTab, setAnalyticsSubTab] = useState<"kpis" | "sentinel" | "compliance">("kpis");
+  const [showIncidentForm, setShowIncidentForm] = useState(false);
+  const [newIncidentForm, setNewIncidentForm] = useState({
+    department: "EMERGENCY UNIT",
+    typeAr: "",
+    typeEn: "",
+    severity: "Medium",
+    descAr: "",
+    descEn: "",
+    rcaAr: "",
+    rcaEn: "",
+    actionAr: "",
+    actionEn: ""
+  });
+  const [jciCheckedArray, setJciCheckedArray] = useState<number[]>([1, 2, 4, 5]);
+
   // Dynamically update browser tab title to match Settings configurations
   useEffect(() => {
     if (hospitalSettings) {
@@ -741,6 +786,11 @@ function AppContent() {
         ? (hospitalSettings.portalTitleAr || hospitalSettings.nameAr || "بوابة بهية الرقمية")
         : (hospitalSettings.portalTitleEn || hospitalSettings.nameEn || "Baheya Digital Portal");
       document.title = title;
+      try {
+        if (window.parent && window.parent.document) {
+          window.parent.document.title = title;
+        }
+      } catch (e) {}
     }
   }, [hospitalSettings, language]);
 
@@ -823,15 +873,17 @@ function AppContent() {
   
   const [selectedShift, setSelectedShift] = useState<string>(() => getActiveShiftId());
 
-  // Roster Calendar date ranges: May 16th to June 15th, 2026 (Perfect Match for 2026)
+  // Roster Calendar date ranges: June 1st to July 31st, 2026 (June - July 2026)
   const ROSTER_DAYS_KEYS = [
-    "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
-    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"
+    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31"
   ];
 
   const ROSTER_DAYS_WD = [
-    "SAT", "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN",
-    "MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN", "MON"
+    "MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN",
+    "MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN",
+    "MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN",
+    "MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN",
+    "MON", "TUE", "WED"
   ];
 
   // Roster states populated from localStorage or generated matching PDF format
@@ -853,6 +905,8 @@ function AppContent() {
   const [wishReasonAr, setWishReasonAr] = useState<string>("");
   const [wishReasonEn, setWishReasonEn] = useState<string>("");
   const [modificationRequestNote, setModificationRequestNote] = useState<string>("");
+  const [wishInputMode, setWishInputMode] = useState<"manual" | "stamp">("stamp");
+  const [stampActiveShift, setStampActiveShift] = useState<string>("M");
 
   // Leadership sign-off approvals for the entire roster (CNO and Director)
   const [cnoApproved, setCnoApproved] = useState<boolean>(() => {
@@ -875,16 +929,15 @@ function AppContent() {
       try { return JSON.parse(saved); } catch (e) {}
     }
     return [
-      { value: "2026-05", labelAr: "16 مايو - 15 يونيو 2026 (الروستر الحالي)", labelEn: "May 16 - June 15, 2026 (Current)" },
-      { value: "2026-06", labelAr: "16 يونيو - 15 يوليو 2026 (الخطة القادمة)", labelEn: "June 16 - July 15, 2026 (Upcoming)" },
-      { value: "2026-07", labelAr: "16 يوليو - 15 أغسطس 2026", labelEn: "July 16 - Aug 15, 2026" },
-      { value: "2026-04", labelAr: "16 أبريل - 15 مايو 2026 (الأرشيف السابق)", labelEn: "April 16 - May 15, 2026 (Historic)" },
+      { value: "2026-06", labelAr: "يونيو - يوليو 2026 (الروستر الموحد الجديد)", labelEn: "June 1 - July 31, 2026 (Unified Active Cycle)" },
+      { value: "2026-05", labelAr: "1 مايو - 31 مايو 2026 (الأرشيف السابق)", labelEn: "May 1 - May 31, 2026 (Historic)" },
+      { value: "2026-04", labelAr: "16 أبريل - 15 مايو 2026", labelEn: "April 16 - May 15, 2026" },
       { value: "2026-03", labelAr: "16 مارس - 15 أبريل 2026", labelEn: "March 16 - April 15, 2026" }
     ];
   });
 
   const [selectedRosterPeriod, setSelectedRosterPeriod] = useState<string>(() => {
-    return localStorage.getItem("baheya_selected_roster_period") || "2026-05";
+    return localStorage.getItem("baheya_selected_roster_period") || "2026-06";
   });
 
   // Customizer for administrative signers names & promotions
@@ -913,12 +966,11 @@ function AppContent() {
     const found = availablePeriods.find(p => p.value === periodKey);
     if (found) return found.labelAr;
     switch (periodKey) {
-      case "2026-05": return "16 مايو - 15 يونيو 2026 (الروستر الحالي)";
-      case "2026-06": return "16 يونيو - 15 يوليو 2026 (الخطة القادمة)";
-      case "2026-07": return "16 يوليو - 15 أغسطس 2026";
-      case "2026-04": return "16 أبريل - 15 مايو 2026 (الأرشيف السابق)";
+      case "2026-06": return "يونيو - يوليو 2026 (الروستر الموحد الجديد)";
+      case "2026-05": return "1 مايو - 31 مايو 2026 (الأرشيف السابق)";
+      case "2026-04": return "16 أبريل - 15 مايو 2026";
       case "2026-03": return "16 مارس - 15 أبريل 2026";
-      default: return `${periodKey} (دورة 16 إلى 15)`;
+      default: return `${periodKey} (دورة كاملة)`;
     }
   };
 
@@ -926,9 +978,8 @@ function AppContent() {
     const found = availablePeriods.find(p => p.value === periodKey);
     if (found) return found.labelEn;
     switch (periodKey) {
-      case "2026-05": return "May 16 - June 15, 2026 (Current)";
-      case "2026-06": return "June 16 - July 15, 2026 (Upcoming)";
-      case "2026-07": return "July 16 - Aug 15, 2026";
+      case "2026-06": return "June 1 - July 31, 2026 (Unified Active Cycle)";
+      case "2026-05": return "May 1 - May 31, 2026 (Historic Archive)";
       case "2026-04": return "April 16 - May 15, 2026";
       case "2026-03": return "March 16 - April 15, 2026";
       default: return `${periodKey} cycle`;
@@ -1016,6 +1067,83 @@ function AppContent() {
         return updated;
       });
     }
+  };
+
+  const handleStampWish = (dayKey: string, shift: string, isRosterFullyLocked: boolean) => {
+    if (isRosterFullyLocked) {
+      alert(language === "ar" ? "🔒 الروستر معتمد نهائياً ومغلق تماماً ضد أي رغبات جديدة." : "Roster is sealed.");
+      return;
+    }
+
+    // Check if there is an approved wish for this day
+    const approvedWish = rosterWishes.find(
+      (w: any) => w.employeeId === currentUser.id && w.dayKey === dayKey && w.status === "approved"
+    );
+    if (approvedWish) {
+      alert(language === "ar" 
+        ? `⚠️ شفت يوم ${dayKey} معتمد ومغلق (${approvedWish.requestedShift}). لتعديله يرجى تعبئة طلب التعديل اليدوي بالأسفل.`
+        : `Shift for day ${dayKey} is approved (${approvedWish.requestedShift}) and cannot be direct-stamped. Please submit a manual adjustment request.`
+      );
+      return;
+    }
+
+    if (shift === "DELETE") {
+      // Delete any existing wish for this day
+      const updated = rosterWishes.filter(
+        (w: any) => !(w.employeeId === currentUser.id && w.dayKey === dayKey)
+      );
+      setRosterWishes(updated);
+      localStorage.setItem("baheya_roster_wishes", JSON.stringify(updated));
+      return;
+    }
+
+    // Generate or update wish
+    const existingIndex = rosterWishes.findIndex(
+      (w: any) => w.employeeId === currentUser.id && w.dayKey === dayKey
+    );
+
+    let updatedWishes = [...rosterWishes];
+    const newWish = {
+      id: existingIndex >= 0 ? rosterWishes[existingIndex].id : `wish-${Date.now()}`,
+      employeeId: currentUser.id,
+      employeeNameAr: currentUser.nameAr,
+      employeeNameEn: currentUser.nameEn,
+      departmentName: currentUser.department || "EMERGENCY UNIT",
+      department: currentUser.department || "EMERGENCY UNIT",
+      period: selectedRosterPeriod,
+      dayKey: dayKey,
+      requestedShift: shift,
+      reasonAr: language === "ar" ? "تسجيل سريع عبر جدول رغبات الموظف بلمسة واحدة" : "Quick stamp via employee roster board with 1-click",
+      reasonEn: "Quick stamp preference via roster dashboard with 1-click",
+      status: "pending",
+      submittedAt: new Date().toISOString()
+    };
+
+    if (existingIndex >= 0) {
+      if (updatedWishes[existingIndex].status === "approved") {
+        return;
+      }
+      updatedWishes[existingIndex] = newWish;
+    } else {
+      updatedWishes = [newWish, ...updatedWishes];
+    }
+
+    setRosterWishes(updatedWishes);
+    localStorage.setItem("baheya_roster_wishes", JSON.stringify(updatedWishes));
+
+    // Add notification
+    const newNotification = {
+      id: `notif-${Date.now()}`,
+      messageAr: `⚙️ رغبة سريعة جديدة: قامت الممرضة "${currentUser.nameAr}" بتسجيل رغبة يوم ${dayKey} شفت "${shift}".`,
+      titleAr: `رغبة نوبتجية لـ ${currentUser.nameAr}`,
+      messageEn: `⚙️ Quick shift wish: Nurse "${currentUser.nameEn}" stamped shift "${shift}" for Day ${dayKey}.`,
+      titleEn: `Quick wish: ${currentUser.nameEn}`,
+      bodyAr: `طلب كادر التمريض تثبيت الفترة (${shift}) ليوم ${dayKey} بقسم ${currentUser.department}.`,
+      bodyEn: `Staff registered shift (${shift}) for day ${dayKey} inside ${currentUser.department}.`,
+      timestamp: new Date().toISOString(),
+      read: false,
+    };
+    setNotifications([newNotification, ...notifications]);
   };
 
   const setResolvedGaps = (updated: Record<string, any>) => {
@@ -1273,7 +1401,7 @@ function AppContent() {
   const [editTemplateItemIndex, setEditTemplateItemIndex] = useState<number | null>(null);
 
   // User and Admin Access controls
-  const [systemUsers, setSystemUsers, systemUsersLoaded] = useFirestoreSync<AppUser>(syncSystemUsers, []);
+  const [systemUsers, setSystemUsers, systemUsersLoaded] = useFirestoreSync<AppUser>(syncSystemUsers, MOCK_USERS);
 
   const [rolesList, setRolesList] = useFirestoreSync<any>(syncRoles, [
     { id: "staff", nameAr: "أخصائي (Staff)", nameEn: "Staff Nurse" },
@@ -1407,6 +1535,29 @@ function AppContent() {
   });
 
   const [viewingUserProfileUser, setViewingUserProfileUser] = useState<AppUser | null>(null);
+
+  // Sentinel Events & adverse clinical incidents state
+  const [sentinelIncidents, setSentinelIncidents] = useFirestoreSync<any>(
+    syncSentinelIncidents,
+    [
+      {
+        id: "mock-inc-1",
+        date: "2026-06-06",
+        department: "EMERGENCY UNIT",
+        typeAr: "سقوط مريض (Patient Fall)",
+        typeEn: "Patient Fall",
+        severity: "Critical",
+        descAr: "انزلاق مريض بالسن قرب ممر الدخول الخارجي للطوارئ وتم إسعافه فوراً.",
+        descEn: "Elderly patient slipped near the external ER entrance ramp, attended swiftly.",
+        rcaAr: "عدم تفعيل شريط منع الانزلاق اللاصق على المنحدر المائل.",
+        rcaEn: "Missing anti-skid tape on high gradient entrance ramp.",
+        actionAr: "تم تثبيت شريط منع انزلاق ذي جودة عالية وفوسفوري عاجلاً بقرار الجودة.",
+        actionEn: "Standardized anti-skid floor markers installed on critical path immediately.",
+        loggedBy: "أ. فاطمة الزهراء",
+        status: "Resolved"
+      }
+    ]
+  );
 
   // Notifications system for supervisors/auditors
   const [notifications, setNotifications] = useFirestoreSync<Notification>(
@@ -6618,7 +6769,40 @@ For premium ease of use, you can click the visual override button 'Modify & Choo
       })()}
 
           {/* TAB: Interactive Quality Compliance Analytics & CQI Suite */}
-          {activeTab === "analytics" && (() => {
+          {activeTab === "analytics" && (
+            <QualityAnalyticsHub
+              records={records}
+              allAvailableTemplates={allAvailableTemplates}
+              language={language}
+              currentUser={currentUser}
+              resolvedGaps={resolvedGaps}
+              handleToggleGapState={handleToggleGapState}
+              editingGapKey={editingGapKey}
+              setEditingGapKey={setEditingGapKey}
+              gapResolutionNote={gapResolutionNote}
+              setGapResolutionNote={setGapResolutionNote}
+              handleSaveGapResolution={handleSaveGapResolution}
+              handleSeedMockAuditData={handleSeedMockAuditData}
+              setRecords={setRecords}
+              sentinelIncidents={sentinelIncidents}
+              setSentinelIncidents={setSentinelIncidents}
+              jciCheckedArray={jciCheckedArray}
+              setJciCheckedArray={setJciCheckedArray}
+              analyticsSubTab={analyticsSubTab}
+              setAnalyticsSubTab={setAnalyticsSubTab}
+              showIncidentForm={showIncidentForm}
+              setShowIncidentForm={setShowIncidentForm}
+              newIncidentForm={newIncidentForm}
+              setNewIncidentForm={setNewIncidentForm}
+              addSystemLog={addSystemLog}
+              notifications={notifications}
+              setNotifications={setNotifications}
+              handleNotificationClick={handleNotificationClick}
+              hospitalSettings={hospitalSettings}
+            />
+          )}
+
+          {false && (() => {
             // Aggregate quality statistics dynamically
             let totalChecks = 0;
             let successfulChecks = 0;
@@ -9069,18 +9253,82 @@ For premium ease of use, you can click the visual override button 'Modify & Choo
                     {/* Date choice */}
                     <div className="space-y-3.5 text-xs font-sans">
                       <div>
-                        <label className="block text-[10px] font-black text-slate-450 mb-1">{language === "ar" ? "اختر اليوم لشفت الرغبة:" : "Roster Calendar Day:"}</label>
-                        <select
-                          value={wishDayKey}
-                          onChange={(e) => setWishDayKey(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 focus:bg-white focus:ring-1 focus:ring-pink-500 outline-none font-bold cursor-pointer"
-                        >
-                          {ROSTER_DAYS_KEYS.map((k, i) => (
-                            <option key={i} value={k}>
-                              {language === "ar" ? `يوم ${k} مايو-يونيو (يوم ${ROSTER_DAYS_WD[i]})` : `Day ${k} (${ROSTER_DAYS_WD[i]})`}
-                            </option>
-                          ))}
-                        </select>
+                        <label className="block text-[11px] font-black text-slate-900 mb-2">
+                          {language === "ar" ? "📍 جدول تحديد رغبة اليوم باللمس (علامة اليوم 1 - 31):" : "📍 Roster-Style Day Marking Table (1 - 31):"}
+                        </label>
+                        
+                        <div className="overflow-x-auto border border-pink-100 rounded-2xl bg-pink-50/10 p-3 no-print shadow-inner" dir="rtl">
+                          <table className="w-full text-center border-collapse text-[10px]">
+                            <thead>
+                              <tr className="border-b border-pink-100">
+                                <th className="p-1 px-2 font-black text-slate-600 border-l border-pink-100 text-[11px] min-w-[120px] text-right">
+                                  {language === "ar" ? "اسم الموظف" : "Employee Name"}
+                                </th>
+                                {ROSTER_DAYS_KEYS.map((k, i) => (
+                                  <th key={k} className="p-1 font-mono font-black text-slate-500 min-w-[34px]">
+                                    <div className="text-[10px] text-pink-600 font-bold">{k}</div>
+                                    <div className="text-[7.5px] text-slate-400 font-semibold">{language === "ar" ? ROSTER_DAYS_WD[i] === "MON" ? "إثن" : ROSTER_DAYS_WD[i] === "TUE" ? "ثلا" : ROSTER_DAYS_WD[i] === "WED" ? "أرب" : ROSTER_DAYS_WD[i] === "THU" ? "خمي" : ROSTER_DAYS_WD[i] === "FRI" ? "جمعه" : ROSTER_DAYS_WD[i] === "SAT" ? "سبت" : "أحد" : ROSTER_DAYS_WD[i].substring(0, 2)}</div>
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr className="hover:bg-pink-50/20">
+                                <td className="p-2 font-extrabold text-slate-800 text-[11px] border-l border-pink-100 text-right font-sans">
+                                  {language === "ar" ? currentUser.nameAr : currentUser.nameEn}
+                                </td>
+                                {ROSTER_DAYS_KEYS.map((dayKey) => {
+                                  // Find if there is any submitted wish for this day
+                                  const matchingWish = rosterWishes.find(
+                                    (w: any) => w.employeeId === currentUser.id && w.dayKey === dayKey
+                                  );
+                                  const isSelected = wishDayKey === dayKey;
+                                  
+                                  let cellContent = "➕";
+                                  let cellBg = "bg-white hover:bg-slate-100 border-slate-205";
+                                  if (matchingWish) {
+                                    cellContent = matchingWish.requestedShift || "OFF";
+                                    if (matchingWish.status === "approved") {
+                                      cellBg = "bg-emerald-100 hover:bg-emerald-200 border-emerald-300 text-emerald-800 font-black";
+                                    } else if (matchingWish.status === "rejected") {
+                                      cellBg = "bg-rose-100 hover:bg-rose-200 border-rose-300 text-rose-800 font-black";
+                                    } else {
+                                      cellBg = "bg-amber-100 hover:bg-amber-200 border-amber-300 text-amber-800 font-black animate-pulse";
+                                    }
+                                  }
+                                  
+                                  return (
+                                    <td key={dayKey} className="p-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => setWishDayKey(dayKey)}
+                                        className={`w-7 h-7 rounded-lg text-[9px] flex items-center justify-center border font-bold transition-all cursor-pointer ${cellBg} ${
+                                          isSelected ? "ring-2 ring-pink-500 scale-110 shadow-md border-pink-500 z-10" : ""
+                                        }`}
+                                        title={matchingWish ? `${matchingWish.reasonAr || 'طلب معلق'}` : `${language === "ar" ? "انقر لتسجيل رغبة يوم" : "Click to request shift for day"} ${dayKey}`}
+                                      >
+                                        {cellContent}
+                                      </button>
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-2 mt-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-[10px] text-slate-500 font-sans">
+                          <span className="font-bold text-slate-700">💡 {language === "ar" ? "انقر على مربع اليوم (1 - 31) لتسجيل أو تعديل رغبتك السحابية مباشرة" : "Click any day cell (1 - 31) to submit or manage wishes"}</span>
+                          <div className="flex gap-2">
+                            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-amber-150 border border-amber-300 inline-block" /> {language === "ar" ? "طلب معلق" : "Pending"}</span>
+                            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-emerald-150 border border-emerald-300 inline-block" /> {language === "ar" ? "موافق عليها" : "Approved"}</span>
+                            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-white border border-slate-250 inline-block" /> {language === "ar" ? "فارغ" : "Empty"}</span>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 bg-pink-100/30 p-3 rounded-xl border border-pink-150 text-[11px] text-slate-800 leading-relaxed font-sans text-right">
+                          📆 <strong>{language === "ar" ? "الفصل التشغيلي النشط حالياً:" : "Current Operational Window:"}</strong> {language === "ar" ? "يونيو - يوليو 2026 (الدور الصيفي الموحد)" : "June - July 2026 (Unified Summer Cycle)"}
+                        </div>
                       </div>
 
                       {/* CHECK IF LOGGED-IN NURSE ALREADY HAS APPROVED SHIFT */}

@@ -1,37 +1,146 @@
 {
   "entities": {
-    "User": {
-      "title": "User",
-      "description": "System users",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "nameAr": { "type": "string" },
-        "role": { "type": "string" },
-        "status": { "type": "string" }
-      },
-      "required": ["id", "nameAr", "role"]
-    },
-    "Record": {
-      "title": "Record",
-      "description": "Clinical records",
+    "SavedRecord": {
+      "title": "SavedRecord",
+      "description": "Clinical and inventory daily tracking records",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "templateId": { "type": "string" },
-        "date": { "type": "string" }
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "department": { "type": "string" },
+        "staffName": { "type": "string" },
+        "staffId": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "status": { "type": "string" }
       },
-      "required": ["id", "templateId", "date"]
+      "required": ["id", "templateId", "date", "staffId", "createdAt"]
+    },
+    "AppUser": {
+      "title": "AppUser",
+      "description": "Staff and supervisors credentials and profiles",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nameAr": { "type": "string" },
+        "nameEn": { "type": "string" },
+        "role": { "type": "string" },
+        "department": { "type": "string" },
+        "staffId": { "type": "string" },
+        "pin": { "type": "string" }
+      },
+      "required": ["id", "nameAr", "role", "staffId"]
+    },
+    "UnitDailyChecklist": {
+      "title": "UnitDailyChecklist",
+      "description": "Daily unit supervisor audits and answers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "department": { "type": "string" },
+        "date": { "type": "string" },
+        "completedByStaffName": { "type": "string" },
+        "completedByStaffId": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "department", "date", "completedByStaffId"]
+    },
+    "RosterWish": {
+      "title": "RosterWish",
+      "description": "Staff nurse exception shift registration requests",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "dayKey": { "type": "string" },
+        "requestedShift": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "employeeId", "dayKey", "requestedShift"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Secure staff communications and announcements",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "senderNameAr": { "type": "string" },
+        "content": { "type": "string" },
+        "type": { "type": "string" }
+      },
+      "required": ["senderId", "content", "type"]
     }
   },
   "firestore": {
-    "users": {
-        "schema": "User",
-        "description": "User collection"
+    "baheya_clinical_records": {
+      "schema": "SavedRecord",
+      "description": "Stores clinical and safety log records"
     },
-    "records": {
-        "schema": "Record",
-        "description": "Records collection"
+    "baheya_staff_registry": {
+      "schema": "AppUser",
+      "description": "Registry of system clinicians and access attributes"
+    },
+    "baheya_daily_audits": {
+      "schema": "UnitDailyChecklist",
+      "description": "Records of clinical shift safety audits"
+    },
+    "baheya_system_logs": {
+      "schema": "object",
+      "description": "Technical and access operations history"
+    },
+    "baheya_daily_duty_tasks": {
+      "schema": "object",
+      "description": "Standardized list of daily clinical duty tasks"
+    },
+    "baheya_custom_templates": {
+      "schema": "object",
+      "description": "Dynamic custom form templates designed by supervisors/IT"
+    },
+    "baheya_department_rosters": {
+      "schema": "object",
+      "description": "Master department rosters of monthly operational plans"
+    },
+    "baheya_roster_wishes": {
+      "schema": "RosterWish",
+      "description": "Staff-submitted shift request preferences"
+    },
+    "baheya_resolved_gaps": {
+      "schema": "object",
+      "description": "Operational adjustments resolving nursing staffing gaps"
+    },
+    "baheya_settings": {
+      "schema": "object",
+      "description": "Static application attributes and authorization matrix data"
+    },
+    "messages": {
+      "schema": "Message",
+      "description": "ERP messaging and nurse request communication chats"
+    },
+    "notifications": {
+      "schema": "object",
+      "description": "Real-time user notification queues"
+    },
+    "roles": {
+      "schema": "object",
+      "description": "Dynamic custom roles in ERP system"
+    },
+    "permissions": {
+      "schema": "object",
+      "description": "Standard app permission values list"
+    },
+    "access_matrix": {
+      "schema": "object",
+      "description": "Dynamic connection of Roles to Permissions with enabled flags"
+    },
+    "audit_logs": {
+      "schema": "object",
+      "description": "Administrative changes audits registry"
+    },
+    "organizationSettings": {
+      "schema": "object",
+      "description": "Main organization configurations, logo overrides, and names"
     }
   }
 }

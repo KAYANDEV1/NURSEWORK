@@ -126,15 +126,17 @@ interface AttendanceState {
   };
 }
 
-// Fixed Roster Days sequence for Baheya Cycle (16 May - 15 June 2026)
+// Fixed Roster Days sequence for Baheya Cycle (June - July 2026)
 const DEFAULT_ROSTER_DAYS = [
-  "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
-  "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"
+  "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31"
 ];
 
 const DEFAULT_DAYS_WD = [
-  "SAT", "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN",
-  "MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN", "MON"
+  "MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN",
+  "MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN",
+  "MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN",
+  "MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN",
+  "MON", "TUE", "WED"
 ];
 
 // Presets representing job descriptions mapping from user specification

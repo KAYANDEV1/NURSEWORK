@@ -634,4 +634,41 @@ export async function deletePermission(permId: string): Promise<void> {
   }
 }
 
+// 10.15. Sentinel Incidents Real-time Sync and Save
+export function syncSentinelIncidents(onData: (incidents: any[]) => void) {
+  const path = "baheya_sentinel_incidents";
+  return onSnapshot(
+    collection(db, path),
+    (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((doc) => {
+        list.push(doc.data());
+      });
+      onData(list);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.LIST, path);
+    }
+  );
+}
+
+export async function saveSentinelIncident(incident: any): Promise<void> {
+  const path = `baheya_sentinel_incidents/${incident.id}`;
+  try {
+    await setDoc(doc(db, "baheya_sentinel_incidents", incident.id), incident);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function deleteSentinelIncident(incidentId: string): Promise<void> {
+  const path = `baheya_sentinel_incidents/${incidentId}`;
+  try {
+    await deleteDoc(doc(db, "baheya_sentinel_incidents", incidentId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+
 

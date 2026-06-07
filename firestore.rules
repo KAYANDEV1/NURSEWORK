@@ -1,8 +1,133 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    
+    // Global Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Default deny catch-all
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
+    }
+
+    // 1. Clinical Records
+    match /baheya_clinical_records/{recordId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // 2. Staff Registry
+    match /baheya_staff_registry/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // 3. Daily Audits
+    match /baheya_daily_audits/{auditId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // 4. IT / System Logs
+    match /baheya_system_logs/{logId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // 5. Daily Duty Tasks
+    match /baheya_daily_duty_tasks/{taskId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // 6. Custom Templates
+    match /baheya_custom_templates/{templateId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // 7. Department Rosters
+    match /baheya_department_rosters/{rosterId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // 8. Roster Wishes
+    match /baheya_roster_wishes/{wishId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // 9. Resolved Gaps
+    match /baheya_resolved_gaps/{gapId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // 10. Sentinel Incidents
+    match /baheya_sentinel_incidents/{incidentId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // 11. Settings Documents
+    match /baheya_settings/{settingsDocId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // 12. Notifications
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // 13. Organization Settings
+    match /organizationSettings/{settingId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // 14. Access Control Roles
+    match /roles/{roleId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // 15. Permissions
+    match /permissions/{permissionId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // 16. Access Matrix
+    match /access_matrix/{matrixId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // 17. Audit Logs
+    match /audit_logs/{logId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // 18. Chat Messages
+    match /messages/{messageId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && (resource.data.senderId == request.auth.uid);
     }
   }
 }
+
