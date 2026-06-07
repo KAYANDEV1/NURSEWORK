@@ -1,0 +1,37 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nameAr": { "type": "string" },
+        "role": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "nameAr", "role"]
+    },
+    "Record": {
+      "title": "Record",
+      "description": "Clinical records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "templateId": { "type": "string" },
+        "date": { "type": "string" }
+      },
+      "required": ["id", "templateId", "date"]
+    }
+  },
+  "firestore": {
+    "users": {
+        "schema": "User",
+        "description": "User collection"
+    },
+    "records": {
+        "schema": "Record",
+        "description": "Records collection"
+    }
+  }
+}

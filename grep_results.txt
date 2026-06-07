@@ -1,0 +1,14 @@
+907:    localStorage.setItem("baheya_department_rosters", JSON.stringify(defaultRosters));
+1000:        localStorage.setItem("baheya_department_rosters", JSON.stringify(next));
+1008:      localStorage.setItem("baheya_department_rosters", JSON.stringify(updated));
+1446:        localStorage.setItem("baheya_department_rosters", JSON.stringify(rostersFromFirestore));
+1529:        localStorage.setItem("baheya_department_rosters", JSON.stringify(nextRosters));
+2513:      localStorage.setItem("baheya_department_rosters", JSON.stringify(nextList));
+2572:      localStorage.setItem("baheya_department_rosters", JSON.stringify(nextList));
+2654:      localStorage.setItem("baheya_department_rosters", JSON.stringify(nextList));
+2749:      localStorage.setItem("baheya_department_rosters", JSON.stringify(nextList));
+2817:        localStorage.setItem("baheya_department_rosters", JSON.stringify(nextList));
+3300:        localStorage.setItem("baheya_department_rosters", JSON.stringify(nextList));
+8964:                                        localStorage.setItem("baheya_department_rosters", JSON.stringify(nextRosterList));
+11298:                          localStorage.setItem("baheya_department_rosters", JSON.stringify(nextRosterList));
+11354:                          localStorage.setItem("baheya_department_rosters", JSON.stringify(nextRosterList));

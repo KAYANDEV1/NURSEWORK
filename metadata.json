@@ -1,0 +1,8 @@
+{
+  "name": "kayan  Medical Forms - إدارة نماذج مستشفى كيان ",
+  "description": "نظام لإدارة وطباعة النماذج والجرودات الطبية والتمريضية لمستشفى كيان باللغتين العربية والإنجليزية مع قاعدة بيانات محلية اون لاين ",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
