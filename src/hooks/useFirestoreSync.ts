@@ -4,8 +4,9 @@ export function useFirestoreSync<T>(
   syncFn: (onData: (data: T[]) => void) => () => void,
   initialData: T[],
   deps: DependencyList = []
-): [T[], Dispatch<SetStateAction<T[]>>] {
+): [T[], Dispatch<SetStateAction<T[]>>, boolean] {
   const [data, setData] = useState<T[]>(initialData);
+  const [isLoaded, setIsLoaded] = useState(false);
   const syncFnRef = useRef(syncFn);
 
   useEffect(() => {
@@ -15,9 +16,10 @@ export function useFirestoreSync<T>(
   useEffect(() => {
     const unsubscribe = syncFnRef.current((newData) => {
       setData(newData);
+      setIsLoaded(true);
     });
     return () => unsubscribe();
   }, deps);
 
-  return [data, setData];
+  return [data, setData, isLoaded];
 }

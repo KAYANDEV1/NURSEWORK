@@ -734,6 +734,16 @@ function AppContent() {
   const [language, setLanguage] = useState<"ar" | "en">("ar");
   const [isBellOpen, setIsBellOpen] = useState(false);
 
+  // Dynamically update browser tab title to match Settings configurations
+  useEffect(() => {
+    if (hospitalSettings) {
+      const title = language === "ar"
+        ? (hospitalSettings.portalTitleAr || hospitalSettings.nameAr || "بوابة بهية الرقمية")
+        : (hospitalSettings.portalTitleEn || hospitalSettings.nameEn || "Baheya Digital Portal");
+      document.title = title;
+    }
+  }, [hospitalSettings, language]);
+
   console.log("App re-rendering");
 
 
@@ -748,7 +758,7 @@ function AppContent() {
       createdAt: "2026-01-01"
     })));
 
-  const [dailyChecklists, setDailyChecklists] = useFirestoreSync<UnitDailyChecklist>(syncDailyAudits, []);
+  const [dailyChecklists, setDailyChecklists, dailyChecklistsLoaded] = useFirestoreSync<UnitDailyChecklist>(syncDailyAudits, []);
 
   const [rolePermissions, setRolePermissions] = useState(() => {
     const stored = localStorage.getItem("baheya_role_permissions");
@@ -825,9 +835,9 @@ function AppContent() {
   ];
 
   // Roster states populated from localStorage or generated matching PDF format
-  const [rosterList, rawSetRosterList] = useFirestoreSync<any>(syncDepartmentRosters, []);
+  const [rosterList, rawSetRosterList, rosterListLoaded] = useFirestoreSync<any>(syncDepartmentRosters, []);
 
-  const [rosterWishes, rawSetRosterWishes] = useFirestoreSync<any>(syncRosterWishes, []);
+  const [rosterWishes, rawSetRosterWishes, rosterWishesLoaded] = useFirestoreSync<any>(syncRosterWishes, []);
 
   const [selectedRosterDept, setSelectedRosterDept] = useState<string>("EMERGENCY UNIT");
   const [activeRosterCellEdit, setActiveRosterCellEdit] = useState<{
@@ -1263,7 +1273,7 @@ function AppContent() {
   const [editTemplateItemIndex, setEditTemplateItemIndex] = useState<number | null>(null);
 
   // User and Admin Access controls
-  const [systemUsers, setSystemUsers] = useFirestoreSync<AppUser>(syncSystemUsers, []);
+  const [systemUsers, setSystemUsers, systemUsersLoaded] = useFirestoreSync<AppUser>(syncSystemUsers, []);
 
   const [rolesList, setRolesList] = useFirestoreSync<any>(syncRoles, [
     { id: "staff", nameAr: "أخصائي (Staff)", nameEn: "Staff Nurse" },
@@ -1353,7 +1363,7 @@ function AppContent() {
         saveAccessMatrix(matrix).catch(e => console.error("Error seeding access matrix item", e));
       });
     }
-  }, [accessMatrix.length, rolesList, permissionsList]);
+  }, [accessMatrix.length, rolesList.length, permissionsList.length]);
 
   const checkPermission = (permissionId: string): boolean => {
     if (!currentUser) return false;
@@ -1419,7 +1429,7 @@ function AppContent() {
     if (!isSupervisor && currentUser.department) {
       setSelectedRosterDept(currentUser.department);
     }
-  }, [currentUser, isSupervisor]);
+  }, [currentUser?.id, currentUser?.department, isSupervisor]);
 
   // Helper to determine the current nurse's scheduled shift today in the active roster
   const getCurrentUserShiftToday = () => {
@@ -1555,191 +1565,9 @@ function AppContent() {
       console.log("Firebase Central Connection: ", online ? "ACTIVE" : "OFFLINE_FALLBACK");
     });
 
-    // 2. Real-time sync of clinical records
-    const unsubRecords = syncClinicalRecords((recordsFromFirestore) => {
-      if (recordsFromFirestore.length > 0) {
-        setRecords(recordsFromFirestore);
-      }
-    });
-
-    // 3. Real-time sync of Staff registry (handles password recoveries/updates globally)
-    const unsubStaff = syncStaffRegistry((usersFromFirestore) => {
-      if (usersFromFirestore.length > 0) {
-        setSystemUsers(usersFromFirestore);
-        localStorage.setItem("baheya_system_users", JSON.stringify(usersFromFirestore));
-
-        // Sync of active authenticated currentUser live on reload/update
-        const activeUserId = localStorage.getItem("baheya_current_user_id");
-        if (activeUserId) {
-          const found = usersFromFirestore.find((u: AppUser) => u.id === activeUserId);
-          if (found) {
-            setCurrentUser(found);
-            localStorage.setItem("baheya_current_user_object", JSON.stringify(found));
-          }
-        }
-      } else {
-        // Bootstrap/seed database staff profile details on first startup
-        MOCK_USERS.forEach((u: AppUser) => {
-          saveStaffMember(u).catch(err => console.error(err));
-        });
-      }
-    });
-
-    // 4. Real-time sync of supervisor daily inspections / audits
-    const unsubAudits = syncDailyAudits((auditsFromFirestore) => {
-      if (auditsFromFirestore.length > 0) {
-        setDailyChecklists(auditsFromFirestore);
-        localStorage.setItem("baheya_daily_checklists", JSON.stringify(auditsFromFirestore));
-      } else {
-        // Sync local storage backups to cloud
-        const stored = localStorage.getItem("baheya_daily_checklists");
-        if (stored) {
-          try {
-            const parsed = JSON.parse(stored);
-            if (parsed.length > 0) {
-              parsed.forEach((a: UnitDailyChecklist) => {
-                saveDailyAudit(a).catch(err => console.error(err));
-              });
-            }
-          } catch (e) {}
-        }
-      }
-    });
-
     // 5. Real-time sync of active IT diagnostics / troubleshooting logs
     const unsubLogs = syncSystemLogs((logsFromFirestore) => {
       setSystemLogs(logsFromFirestore);
-    });
-
-    // 6. Real-time sync of Department Rosters
-    const unsubRosters = syncDepartmentRosters((rostersFromFirestore) => {
-      if (rostersFromFirestore.length > 0) {
-        rawSetRosterList(rostersFromFirestore);
-        localStorage.setItem("baheya_department_rosters", JSON.stringify(rostersFromFirestore));
-      } else {
-        // Seed default rosters on fresh load
-        const stored = localStorage.getItem("baheya_department_rosters");
-        let nextRosters: any[] = [];
-        if (stored) {
-          try {
-            nextRosters = JSON.parse(stored);
-          } catch(e) {}
-        }
-        
-        if (!nextRosters || nextRosters.length === 0) {
-          // Generate defaults
-          const defaultRosters: any[] = [
-            {
-              id: "EMERGENCY UNIT",
-              departmentName: "EMERGENCY UNIT",
-              startDate: "2026-05-16",
-              endDate: "2026-06-15",
-              rows: [
-                {
-                  employeeId: "emp-1",
-                  employeeNameAr: "محمود عمر",
-                  employeeNameEn: "MAHMOUD OMAR",
-                  roleTitleAr: "مساعد رئيس تمريض (AHN)",
-                  roleTitleEn: "Asst. Head Nurse (AHN)",
-                  employeeCode: "20810",
-                  shifts: { "20": "D", "29": "D", "30": "D", "8": "D", "14": "D", "15": "D" }
-                },
-                {
-                  employeeId: "emp-2",
-                  employeeNameAr: "هاني ناصر",
-                  employeeNameEn: "HANY NASER",
-                  roleTitleAr: "أخصائي تمريض (SN)",
-                  roleTitleEn: "Staff Nurse (SN)",
-                  employeeCode: "20906",
-                  shifts: { "18": "DN", "23": "DN", "26": "D", "30": "DN", "31": "D", "3": "DN", "6": "DN", "8": "D", "10": "DN", "13": "DN" }
-                }
-              ]
-            }
-          ];
-
-          const allDepartments = [
-            "EMERGENCY UNIT", "INTENSIVE CARE", "OPERATING ROOM", "CHEMOTHERAPY DAYCARE",
-            "RADIOLOGY UNIT", "PHARMACY STORE", "PEDIATRIC WARD", "QUALITY CONTROL", "LABORATORY DEPT"
-          ];
-          allDepartments.forEach(dept => {
-            if (dept !== "EMERGENCY UNIT") {
-              defaultRosters.push({
-                id: dept,
-                departmentName: dept,
-                startDate: "2026-05-16",
-                endDate: "2026-06-15",
-                rows: [
-                  {
-                    employeeId: `emp-dept-1-${dept}`,
-                    employeeNameAr: `ممرض ${dept} أ`,
-                    employeeNameEn: `${dept} Nurse A`,
-                    roleTitleAr: "أخصائي تمريض (SN)",
-                    roleTitleEn: "Staff Nurse (SN)",
-                    employeeCode: "40101",
-                    shifts: { "16": "M", "17": "M", "20": "D", "30": "DN", "5": "N" }
-                  },
-                  {
-                    employeeId: `emp-dept-2-${dept}`,
-                    employeeNameAr: `ممرض ${dept} ب`,
-                    employeeNameEn: `${dept} Nurse B`,
-                    roleTitleAr: "أخصائي تمريض (SN)",
-                    roleTitleEn: "Staff Nurse (SN)",
-                    employeeCode: "40102",
-                    shifts: { "18": "A", "19": "A", "25": "DN", "2": "D", "8": "N" }
-                  }
-                ]
-              });
-            }
-          });
-          nextRosters = defaultRosters;
-        }
-
-        nextRosters.forEach((rost) => {
-          saveDepartmentRoster(rost).catch(err => console.error(err));
-        });
-        rawSetRosterList(nextRosters);
-        localStorage.setItem("baheya_department_rosters", JSON.stringify(nextRosters));
-      }
-    });
-
-    // 7. Real-time sync of Roster Wishes
-    const unsubWishes = syncRosterWishes((wishesFromFirestore) => {
-      if (wishesFromFirestore.length > 0) {
-        rawSetRosterWishes(wishesFromFirestore);
-        localStorage.setItem("baheya_roster_wishes", JSON.stringify(wishesFromFirestore));
-      } else {
-        const stored = localStorage.getItem("baheya_roster_wishes");
-        let nextWishes: any[] = [];
-        if (stored) {
-          try {
-            nextWishes = JSON.parse(stored);
-          } catch(e) {}
-        }
-        
-        if (!nextWishes || nextWishes.length === 0) {
-          nextWishes = [
-            {
-              id: "wish-1",
-              employeeId: "user-nurse",
-              employeeNameAr: "أ. فاطمة الزهراء",
-              employeeNameEn: "Sister Fatima El-Zahraa",
-              departmentName: "EMERGENCY UNIT",
-              dayKey: "25",
-              requestedShift: "OFF",
-              reasonAr: "مرافقة والدتي للمستشفى للفحص الدوري للسرطان",
-              reasonEn: "Accompanying my mother to routine screening",
-              status: "pending",
-              submittedAt: new Date().toISOString()
-            }
-          ];
-        }
-
-        nextWishes.forEach((w) => {
-          saveRosterWish(w).catch(err => console.error(err));
-        });
-        rawSetRosterWishes(nextWishes);
-        localStorage.setItem("baheya_roster_wishes", JSON.stringify(nextWishes));
-      }
     });
 
     // Load static templates configurations
@@ -1827,16 +1655,187 @@ function AppContent() {
     }
 
     return () => {
-      unsubRecords();
-      unsubStaff();
-      unsubAudits();
       unsubLogs();
-      unsubRosters();
-      unsubWishes();
     };
   }, []);
 
-  // Secure and lock activeTab based on user roles and authorized privileges
+  // Reactive side-effects to synchronize systemUsers changes and keep session updated without duplicate snapshot listeners
+  useEffect(() => {
+    if (!systemUsersLoaded) return;
+    if (systemUsers.length > 0) {
+      localStorage.setItem("baheya_system_users", JSON.stringify(systemUsers));
+      const activeUserId = localStorage.getItem("baheya_current_user_id");
+      if (activeUserId) {
+        const found = systemUsers.find((u: AppUser) => u.id === activeUserId);
+        if (found) {
+          setCurrentUser((prev) => {
+            if (JSON.stringify(prev) === JSON.stringify(found)) return prev;
+            return found;
+          });
+          localStorage.setItem("baheya_current_user_object", JSON.stringify(found));
+        }
+      }
+    } else {
+      // Bootstrap/seed database staff profile details on first startup
+      MOCK_USERS.forEach((u: AppUser) => {
+        saveStaffMember(u).catch(err => console.error(err));
+      });
+    }
+  }, [systemUsers, systemUsersLoaded]);
+
+  // Reactive side-effects to synchronize dailyChecklists changes without duplicate snapshot listeners
+  useEffect(() => {
+    if (!dailyChecklistsLoaded) return;
+    if (dailyChecklists.length > 0) {
+      localStorage.setItem("baheya_daily_checklists", JSON.stringify(dailyChecklists));
+    } else {
+      // Sync local storage backups to cloud
+      const stored = localStorage.getItem("baheya_daily_checklists");
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (parsed.length > 0) {
+            parsed.forEach((a: UnitDailyChecklist) => {
+              saveDailyAudit(a).catch(err => console.error(err));
+            });
+          }
+        } catch (e) {}
+      }
+    }
+  }, [dailyChecklists, dailyChecklistsLoaded]);
+
+  // Reactive side-effects to synchronize rosterList changes without duplicate snapshot listeners
+  useEffect(() => {
+    if (!rosterListLoaded) return;
+    if (rosterList.length > 0) {
+      localStorage.setItem("baheya_department_rosters", JSON.stringify(rosterList));
+    } else {
+      // Seed default rosters on fresh load
+      const stored = localStorage.getItem("baheya_department_rosters");
+      let nextRosters: any[] = [];
+      if (stored) {
+        try {
+          nextRosters = JSON.parse(stored);
+        } catch (e) {}
+      }
+      
+      if (!nextRosters || nextRosters.length === 0) {
+        // Generate defaults
+        const defaultRosters: any[] = [
+          {
+            id: "EMERGENCY UNIT",
+            departmentName: "EMERGENCY UNIT",
+            startDate: "2026-05-16",
+            endDate: "2026-06-15",
+            rows: [
+              {
+                employeeId: "emp-1",
+                employeeNameAr: "محمود عمر",
+                employeeNameEn: "MAHMOUD OMAR",
+                roleTitleAr: "مساعد رئيس تمريض (AHN)",
+                roleTitleEn: "Asst. Head Nurse (AHN)",
+                employeeCode: "20810",
+                shifts: { "20": "D", "29": "D", "30": "D", "8": "D", "14": "D", "15": "D" }
+              },
+              {
+                employeeId: "emp-2",
+                employeeNameAr: "هاني ناصر",
+                employeeNameEn: "HANY NASER",
+                roleTitleAr: "أخصائي تمريض (SN)",
+                roleTitleEn: "Staff Nurse (SN)",
+                employeeCode: "20906",
+                shifts: { "18": "DN", "23": "DN", "26": "D", "30": "DN", "31": "D", "3": "DN", "6": "DN", "8": "D", "10": "DN", "13": "DN" }
+              }
+            ]
+          }
+        ];
+
+        const allDepartments = [
+          "EMERGENCY UNIT", "INTENSIVE CARE", "OPERATING ROOM", "CHEMOTHERAPY DAYCARE",
+          "RADIOLOGY UNIT", "PHARMACY STORE", "PEDIATRIC WARD", "QUALITY CONTROL", "LABORATORY DEPT"
+        ];
+        allDepartments.forEach(dept => {
+          if (dept !== "EMERGENCY UNIT") {
+            defaultRosters.push({
+              id: dept,
+              departmentName: dept,
+              startDate: "2026-05-16",
+              endDate: "2026-06-15",
+              rows: [
+                {
+                  employeeId: `emp-dept-1-${dept}`,
+                  employeeNameAr: `ممرض ${dept} أ`,
+                  employeeNameEn: `${dept} Nurse A`,
+                  roleTitleAr: "أخصائي تمريض (SN)",
+                  roleTitleEn: "Staff Nurse (SN)",
+                  employeeCode: "40101",
+                  shifts: { "16": "M", "17": "M", "20": "D", "30": "DN", "5": "N" }
+                },
+                {
+                  employeeId: `emp-dept-2-${dept}`,
+                  employeeNameAr: `ممرض ${dept} ب`,
+                  employeeNameEn: `${dept} Nurse B`,
+                  roleTitleAr: "أخصائي تمريض (SN)",
+                  roleTitleEn: "Staff Nurse (SN)",
+                  employeeCode: "40102",
+                  shifts: { "18": "A", "19": "A", "25": "DN", "2": "D", "8": "N" }
+                }
+              ]
+            });
+          }
+        });
+        nextRosters = defaultRosters;
+      }
+
+      nextRosters.forEach((rost) => {
+        saveDepartmentRoster(rost).catch(err => console.error(err));
+      });
+      rawSetRosterList(nextRosters);
+      localStorage.setItem("baheya_department_rosters", JSON.stringify(nextRosters));
+    }
+  }, [rosterList, rosterListLoaded]);
+
+  // Reactive side-effects to synchronize rosterWishes changes without duplicate snapshot listeners
+  useEffect(() => {
+    if (!rosterWishesLoaded) return;
+    if (rosterWishes.length > 0) {
+      localStorage.setItem("baheya_roster_wishes", JSON.stringify(rosterWishes));
+    } else {
+      const stored = localStorage.getItem("baheya_roster_wishes");
+      let nextWishes: any[] = [];
+      if (stored) {
+        try {
+          nextWishes = JSON.parse(stored);
+        } catch(e) {}
+      }
+      
+      if (!nextWishes || nextWishes.length === 0) {
+        nextWishes = [
+          {
+            id: "wish-1",
+            employeeId: "user-nurse",
+            employeeNameAr: "أ. فاطمة الزهراء",
+            employeeNameEn: "Sister Fatima El-Zahraa",
+            departmentName: "EMERGENCY UNIT",
+            dayKey: "25",
+            requestedShift: "OFF",
+            reasonAr: "مرافقة والدتي للمستشفى للفحص الدوري للسرطان",
+            reasonEn: "Accompanying my mother to routine screening",
+            status: "pending",
+            submittedAt: new Date().toISOString()
+          }
+        ];
+      }
+
+      nextWishes.forEach((w) => {
+        saveRosterWish(w).catch(err => console.error(err));
+      });
+      rawSetRosterWishes(nextWishes);
+      localStorage.setItem("baheya_roster_wishes", JSON.stringify(nextWishes));
+    }
+  }, [rosterWishes, rosterWishesLoaded]);
+
+  // Secure and lock activeTab based on user roles and authorized privileges - highly optimized dependencies
   useEffect(() => {
     if (!currentUser) return;
     const role = currentUser.role;
@@ -1852,7 +1851,7 @@ function AppContent() {
       }
     }
     // Admin, IT, and President have unrestricted access to all tabs (no redirects)
-  }, [currentUser, activeTab]);
+  }, [currentUser?.role, activeTab]);
 
   // Sync to local database and Firestore db
   const saveToDatabase = (updatedRecords: SavedRecord[]) => {
